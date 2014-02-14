@@ -176,7 +176,7 @@ class dichotomies:
                     data_bi = select_class_binary(arff,positive=labels[0:index], negative=labels[index:])
                 
                     nbc.learn(data_bi)               
-                    evaluations = nbc.evaluate(data_bi.data, ncc_s_param=[0.01])
+                    evaluations = nbc.evaluate(data_bi.data, ncc_s_param=[0.0001])
                     results = []
                     
                     for eva in evaluations: 
@@ -233,8 +233,9 @@ class dichotomies:
             for run,lab in enumerate(lab_validation):
                 ind = clusters.feature_values['class'].index(lab)
                 if results[run][ind]==1.:
-                    discounted_acc[index] += (1/results[run].sum())
+                    score = 1/results[run].sum()
+                    discounted_acc[index] += -1.2 * score * score + 2.2 * score
             
-            index_max = discounted_acc.index(max(discounted_acc))
-            print discounted_acc
-            return linkages.values()[index_max]
+        index_max = discounted_acc.index(max(discounted_acc))
+            
+        return linkages.values()[index_max]
