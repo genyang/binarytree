@@ -5,7 +5,7 @@ Created on 10 avr. 2013
 '''
 import random
 import numpy as np
-from binarytree import select_class_binary
+import binarytree
 from classifip.models import ncc
 
 
@@ -195,7 +195,7 @@ class BinaryTree:
         if self.left.node.isEmpty() or self.right.node.isEmpty() :
             raise Exception("Current node has no left or/and right child node.")
         
-        data = select_class_binary(dataset,positive=self.left.node.label, 
+        data = binarytree.select_class_binary(dataset,positive=self.left.node.label, 
                                        negative=self.right.node.label)
         
         # learning process for the current node
@@ -260,90 +260,154 @@ class BinaryTree:
             
             
     
-    def decision_maximality(self):
-        """
-        Return the classification decisions using using diffrent deicision criteria:
-            - 'intervaldom' : interval dominance
-        
-        :return: the set of optimal classes (under int. dom.) as a 1xn vector
-            where indices of optimal classes are set to one
-        :rtype: :class:`~numpy.array`
-        """
-        
+#     def decision_maximality(self,costs=None):
+#         """
+#         Return the classification decisions using using diffrent deicision criteria:
+#             - 'intervaldom' : interval dominance
+#          
+#         :return: the set of optimal classes (under int. dom.) as a 1xn vector
+#             where indices of optimal classes are set to one
+#         :rtype: :class:`~numpy.array`
+#         """
+#          
+#         if self.left is None or self.right is None :
+#             raise Exception('No child')
+#          
+#         nbData = len(self.node.proba)
+#         class_values = self.node.label
+#         maximality_class=np.ones((nbData,len(class_values)))
+#          
+#         #internal method for comparing two Intervals Probabilities
+#         def compare(i,x,y,x_proba,y_proba):
+#             return (x.node.proba[i][0]*x_proba[i,0] >
+#                     y.node.proba[i][1]*y_proba[i,1])
+#          
+#         def maximality_loop(x,y,x_proba,y_proba):
+#             """
+#             x_proba and y_proba are used here to stock and accumulate the IP of 
+#             the parents nodes shared by currently evaluated nodes 'x' and 'y'.
+#             They are represented as a list (depending on the size of testdata) of
+#             [lower bound, upper bound] (P(x|parents nodes of x))
+#              
+#             """
+#  
+#             #if both left and right children are singletons
+#             if (x.node.count() == 1) and (y.node.count() == 1) :
+#                 #Verify the domination relation between x and y
+#                  
+#                 for i in range(0,nbData):
+#                     if compare(i,x,y,x_proba,y_proba): #y is dominated
+#                         maximality_class[i,class_values.index(y.node.label[0])] = 0
+#                     elif compare(i,y,x,y_proba,x_proba): #x is dominated
+#                         maximality_class[i,class_values.index(x.node.label[0])] = 0 
+#             #if only one child is singleton
+#             elif (x.node.count() == 1) or (y.node.count() == 1) :
+#                 if x.node.count() == 1 : #'x' is singleton
+#                     maximality_loop(y.left,y.right,y_proba.copy(),y_proba.copy())
+#                      
+#                     for i in range(0,nbData): #accumulate the ip of 'y'
+#                         y_proba[i,0] *= y.node.proba[i][0]
+#                         y_proba[i,1] *= y.node.proba[i][1] 
+#                      
+#                     maximality_loop(x,y.left,x_proba.copy(),y_proba.copy())
+#                     maximality_loop(x,y.right,x_proba.copy(),y_proba.copy())
+#                      
+#                 elif y.node.count() == 1 :
+#                     maximality_loop(x.left,x.right,x_proba.copy(),x_proba.copy())
+#                      
+#                     for i in range(0,nbData):
+#                         x_proba[i,0] *= x.node.proba[i][0]
+#                         x_proba[i,1] *= x.node.proba[i][1]
+#                      
+#                     maximality_loop(x.left,y,x_proba.copy(),y_proba.copy())
+#                     maximality_loop(x.right,y,x_proba.copy(),y_proba.copy())
+#                      
+#                 else :
+#                     raise Exception('Unexpected error')
+#                      
+#             else: #both children are not singletons
+#                 maximality_loop(x.left,x.right,x_proba.copy(),x_proba.copy())
+#                 maximality_loop(y.left,y.right,y_proba.copy(),y_proba.copy())
+#                  
+#                 for i in range(0,nbData):
+#                     x_proba[i,0] *= x.node.proba[i][0]
+#                     x_proba[i,1] *= x.node.proba[i][1] 
+#                     y_proba[i,0] *= y.node.proba[i][0]
+#                     y_proba[i,1] *= y.node.proba[i][1]
+#                        
+#                      
+#                 maximality_loop(x,y.left,x_proba.copy(),y_proba.copy())
+#                 maximality_loop(x,y.right,x_proba.copy(),y_proba.copy())
+#                 maximality_loop(x.left,y,x_proba.copy(),y_proba.copy())
+#                 maximality_loop(x.right,y,x_proba.copy(),y_proba.copy())
+#          
+#         maximality_loop(self.left,self.right,self.node.proba.copy(),self.node.proba.copy())
+#         return maximality_class
+    
+    def decision_maximality(self,costs=None):
+    
         if self.left is None or self.right is None :
             raise Exception('No child')
         
         nbData = len(self.node.proba)
         class_values = self.node.label
         maximality_class=np.ones((nbData,len(class_values)))
-        
-        #internal method for comparing two Intervals Probabilities
-        def compare(i,x,y,x_proba,y_proba):
-            return (x.node.proba[i][0]*x_proba[i,0] >
-                    y.node.proba[i][1]*y_proba[i,1])
-        
-        def maximality_loop(x,y,x_proba,y_proba):
-            """
-            x_proba and y_proba are used here to stock and accumulate the IP of 
-            the parents nodes shared by currently evaluated nodes 'x' and 'y'.
-            They are represented as a list (depending on the size of testdata) of
-            [lower bound, upper bound] (P(x|parents nodes of x))
+         
             
-            """
+        nb_class = len(class_values)
+        
+        if costs is None :
+            costs = 1 - np.eye(nb_class)
 
-            #if both left and right children are singletons
-            if (x.node.count() == 1) and (y.node.count() == 1) :
-                #Verify the domination relation between x and y
-                
-                for i in range(0,nbData):
-                    if compare(i,x,y,x_proba,y_proba): #y is dominated
-                        maximality_class[i,class_values.index(y.node.label[0])] = 0
-                    elif compare(i,y,x,y_proba,x_proba): #x is dominated
-                        maximality_class[i,class_values.index(x.node.label[0])] = 0 
-            #if only one child is singleton
+      
+        def lowerExp(x,y,cost_x,cost_y):
+            expInf = np.zeros(nbData) 
+            if 'numpy.ndarray' in str(type(cost_x)) and 'numpy.ndarray' in str(type(cost_y)):
+                for k in range(0,nbData):                
+                    expInf[k] = min(cost_x[k]*x.node.proba[k][0]+cost_y[k]*y.node.proba[k][1],cost_x[k]*x.node.proba[k][1]+cost_y[k]*y.node.proba[k][0])
+            elif 'numpy.ndarray' in str(type(cost_x)) :
+                for k in range(0,nbData):                 
+                    expInf[k] = min(cost_x[k]*x.node.proba[k][0]+cost_y*y.node.proba[k][1],cost_x[k]*x.node.proba[k][1]+cost_y*y.node.proba[k][0])
+            elif 'numpy.ndarray' in str(type(cost_y)) :
+                for k in range(0,nbData):                 
+                    expInf[k] = min(cost_x*x.node.proba[k][0]+cost_y[k]*y.node.proba[k][1],cost_x*x.node.proba[k][1]+cost_y[k]*y.node.proba[k][0])
+            else :
+                for k in range(0,nbData):                 
+                    expInf[k] = min(cost_x*x.node.proba[k][0]+cost_y*y.node.proba[k][1],cost_x*x.node.proba[k][1]+cost_y*y.node.proba[k][0])
+            return expInf
+            
+        def recc(cost,x,y):
+            
+            if x.node.count() == 1 and y.node.count() == 1 :
+                return lowerExp(x,y,cost[class_values.index(x.node.label[0])],cost[class_values.index(y.node.label[0])])
+            
             elif (x.node.count() == 1) or (y.node.count() == 1) :
                 if x.node.count() == 1 : #'x' is singleton
-                    maximality_loop(y.left,y.right,y_proba.copy(),y_proba.copy())
-                    
-                    for i in range(0,nbData): #accumulate the ip of 'y'
-                        y_proba[i,0] *= y.node.proba[i][0]
-                        y_proba[i,1] *= y.node.proba[i][1] 
-                    
-                    maximality_loop(x,y.left,x_proba.copy(),y_proba.copy())
-                    maximality_loop(x,y.right,x_proba.copy(),y_proba.copy())
-                    
+                    return lowerExp(x,y,cost[class_values.index(x.node.label[0])],recc(cost,y.left,y.right))
                 elif y.node.count() == 1 :
-                    maximality_loop(x.left,x.right,x_proba.copy(),x_proba.copy())
-                    
-                    for i in range(0,nbData):
-                        x_proba[i,0] *= x.node.proba[i][0]
-                        x_proba[i,1] *= x.node.proba[i][1]
-                    
-                    maximality_loop(x.left,y,x_proba.copy(),y_proba.copy())
-                    maximality_loop(x.right,y,x_proba.copy(),y_proba.copy())
-                    
+                    return lowerExp(x,y,recc(cost,x.left,x.right),cost[class_values.index(y.node.label[0])])
                 else :
                     raise Exception('Unexpected error')
-                    
-            else: #both children are not singletons
-                maximality_loop(x.left,x.right,x_proba.copy(),x_proba.copy())
-                maximality_loop(y.left,y.right,y_proba.copy(),y_proba.copy())
-                
-                for i in range(0,nbData):
-                    x_proba[i,0] *= x.node.proba[i][0]
-                    x_proba[i,1] *= x.node.proba[i][1] 
-                    y_proba[i,0] *= y.node.proba[i][0]
-                    y_proba[i,1] *= y.node.proba[i][1]
-                      
-                    
-                maximality_loop(x,y.left,x_proba.copy(),y_proba.copy())
-                maximality_loop(x,y.right,x_proba.copy(),y_proba.copy())
-                maximality_loop(x.left,y,x_proba.copy(),y_proba.copy())
-                maximality_loop(x.right,y,x_proba.copy(),y_proba.copy())
-
-                 
-        maximality_loop(self.left,self.right,self.node.proba.copy(),self.node.proba.copy())
+            else :
+                return lowerExp(x,y,recc(cost,x.left,x.right),recc(cost,y.left,y.right))
+            
+            
+        for i in range(0,nb_class):
+            for j in range(i+1,nb_class):
+                cost_i_j = costs[i] - costs[j]
+                #Verify if i is dominated by j
+                expInf = recc(cost_i_j,self.left,self.right)
+                for ind,elem in enumerate(expInf) :
+                    if elem > 0 :
+                        maximality_class[ind,i] = 0
+                #Verify if j is dominated by i
+                expInf = recc(-cost_i_j,self.left,self.right)
+                for ind,elem in enumerate(expInf) :
+                    if elem > 0 :
+                        maximality_class[ind,j] = 0
+                        
         return maximality_class
+                
     
     def decision_intervaldom(self):
         """

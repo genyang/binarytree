@@ -1,4 +1,5 @@
-from binarytree import models,clustering,select_class_binary
+import binarytree
+from binarytree import models,clustering
 from classifip.models import ncc
 from scipy import cluster
 import numpy as np
@@ -90,11 +91,10 @@ class dichotomies:
                 
         obs = cluster.vq.whiten(np.matrix(obs))
         codebook,distortion = cluster.vq.kmeans(obs, 2)
-        
         results,dist = cluster.vq.vq(obs, codebook)
         
         for i,res in enumerate(results) :
-            index = labels.index(obs_label[i])             
+            index = labels.index(obs_label[i])
             freq[index][res] += 1
              
         sum1 = sum(results)
@@ -173,10 +173,10 @@ class dichotomies:
                 # We split labels using the ordinal information
                 if index > 0 :
                    
-                    data_bi = select_class_binary(arff,positive=labels[0:index], negative=labels[index:])
+                    data_bi = binarytree.select_class_binary(arff,positive=labels[0:index], negative=labels[index:])
                 
                     nbc.learn(data_bi)               
-                    evaluations = nbc.evaluate(data_bi.data, ncc_s_param=[0.0001])
+                    evaluations = nbc.evaluate(data_bi.data, ncc_s_param=[2])
                     results = []
                     
                     for eva in evaluations: 
@@ -187,7 +187,8 @@ class dichotomies:
                     for run,lab in enumerate(data_lab):
                         ind = nbc.feature_values['class'].index(lab)
                         if results[run][ind] == 1:
-                            scores[index-1] += 1
+                            sc = 1./results[run].sum()
+                            scores[index-1] += - 1.2* sc*sc + 2.2 * sc
                   
             
             # The NBC yielding the highest score is chosen as the actual split
