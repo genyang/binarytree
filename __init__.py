@@ -1,6 +1,7 @@
 from . import clustering
 from . import dichotomies
 from . import models
+from . import forest
 from classifip.dataset import arff
 
 

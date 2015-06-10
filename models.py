@@ -7,6 +7,7 @@ import random
 import numpy as np
 import binarytree
 from classifip.models import ncc
+from classifip.representations import intervalsProbability as IP
 
 
 class Node:
@@ -85,23 +86,23 @@ class Node:
             left = Node(random.sample(self.label, len(self.label)/2))
             right = Node(list(set(self.label) - set(left.label)))  
             
-        elif method == "data-balanced" :
-            '''
-            Split class values in two subsets so that the number of instances is 
-            'approximatively equal' for both subsets.
-            '''
-            keys = sorted(occurrences, key=occurrences.get)
-            total = sum(occurrences.values())
-            l_label = [keys[-1]]
-            i = 0
-            buff = occurrences[keys[-1]]
-            while buff < total/2 :
-                buff += occurrences[keys[i]]
-                l_label.append(keys[i])
-                i += 1
-            
-            left = Node(l_label)
-            right = Node(list(set(self.label) - set(l_label)))
+#         elif method == "data-balanced" :
+#             '''
+#             Split class values in two subsets so that the number of instances is 
+#             'approximatively equal' for both subsets.
+#             '''
+#             keys = sorted(occurrences, key=occurrences.get)
+#             total = sum(occurrences.values())
+#             l_label = [keys[-1]]
+#             i = 0
+#             buff = occurrences[keys[-1]]
+#             while buff < total/2 :
+#                 buff += occurrences[keys[i]]
+#                 l_label.append(keys[i])
+#                 i += 1
+#             
+#             left = Node(l_label)
+#             right = Node(list(set(self.label) - set(l_label)))
             
         else :
             raise Exception("Unrecognized splitting method")    
@@ -146,7 +147,7 @@ class BinaryTree:
         self.right = None
         
      
-    def build(self, method="random",occurrences=None):
+    def build(self, method="random"):
         """
         Build the structure of the entire binary tree by splitting the initial
         root node (the ensemble of class values) into children nodes.
@@ -166,18 +167,24 @@ class BinaryTree:
             self.right = None
         
         else :
-            if method == "data-balanced":
-                if occurrences is None:
-                    raise Exception('A dictionary of class values occurrences is required. Use count_labels function to get the dictionary')
-             
-            l_node, r_node = self.node.splitNode(method,occurrences)
+            l_node, r_node = self.node.splitNode(method)
             self.left = BinaryTree(node = l_node)
             self.right = BinaryTree(node = r_node)
-            
-            self.left.build(method,{key:occurrences[key] for key in occurrences 
-                                    if key not in r_node.label})
-            self.right.build(method,{key:occurrences[key] for key in occurrences 
-                                     if key not in l_node.label})     
+            self.left.build(method)
+            self.right.build(method)
+              
+#             if method == "data-balanced":
+#                 if occurrences is None:
+#                     raise Exception('A dictionary of class values occurrences is required. Use count_labels function to get the dictionary')
+#              
+#             l_node, r_node = self.node.splitNode(method,occurrences)
+#             self.left = BinaryTree(node = l_node)
+#             self.right = BinaryTree(node = r_node)
+#             
+#             self.left.build(method,{key:occurrences[key] for key in occurrences 
+#                                     if key not in r_node.label})
+#             self.right.build(method,{key:occurrences[key] for key in occurrences 
+#                                      if key not in l_node.label})     
             
 
     
@@ -258,7 +265,51 @@ class BinaryTree:
             self.node.proba = np.ones((len(testdataset),2))
             self.evalAll(testdataset, ncc_epsilon, ncc_s_param)
             
+    def probaPos(self,bound=0):
+        """
+        Calculate the posterior probabilities
+        
+        :param bound: set to '0' to get lower bound and '1' for upper bound and
+        '[0,1]' for both
+        :tyope bound: either int or [int,int]
+        """
+        if self.left is None or self.right is None :
+            raise Exception('No child')
+        
+        nbData = len(self.node.proba)
+        class_values = self.node.label            
+        nb_class = len(class_values)
+        
+        
+        if type(bound) == int:
+            ret = np.ones((nbData,nb_class))
+            def recc(tree):
+                if tree is not None:
+                    for k in range(0,nbData):
+                        for l in tree.node.label:
+                            ret[k,class_values.index(l)] *=tree.node.proba[k][bound]
+                
+                    recc(tree.left)
+                    recc(tree.right)
+                    
+            recc(self)
+        else:
+            ret = []
+            def recc_bis(tree):
+                if tree is not None:
+                    for l in tree.node.label:
+                        ip[1,class_values.index(l)] *=tree.node.proba[k][0]
+                        ip[0,class_values.index(l)] *=tree.node.proba[k][1]
             
+                    recc_bis(tree.left)
+                    recc_bis(tree.right)
+
+            for k in range(0,nbData):
+                ip = np.ones((2,nb_class))
+                recc_bis(self)
+                ret.append(IP.IntervalsProbability(ip))
+        
+        return ret
     
 #     def decision_maximality(self,costs=None):
 #         """
@@ -411,84 +462,20 @@ class BinaryTree:
     
     def decision_intervaldom(self):
         """
-        Return the classification decisions using using diffrent deicision criteria:
-            - 'intervaldom' : interval dominance
+        Return the classification decisions using using interval dominance with
+        unitary costs
         
-        :return: the set of optimal classes (under int. dom.) as a 1xn vector
-            where indices of optimal classes are set to one
-        :rtype: :class:`~numpy.array`
         """
         
         if self.left is None or self.right is None :
             raise Exception('No child')
-        
-        nbData = len(self.node.proba)
-        class_values = self.node.label
-        maximality_class=np.ones((nbData,len(class_values)))
-        
-        #internal method for comparing two Intervals Probabilities
-        def compare(i,x,y,x_proba,y_proba):
-            return (x.node.proba[i][0]*x_proba[i,0] >
-                    y.node.proba[i][1]*y_proba[i,1])
-        
-        def maximality_loop(x,y,x_proba,y_proba):
-            """
-            x_proba and y_proba are used here to stock and accumulate the IP of 
-            the parents nodes shared by currently evaluated nodes 'x' and 'y'.
-            They are represented as a list (depending on the size of testdata) of
-            [lower bound, upper bound] (P(x|parents nodes of x))
-            
-            """
-
-            #if both left and right children are singletons
-            if (x.node.count() == 1) and (y.node.count() == 1) :
-                #Verify the domination relation between x and y
                 
-                for i in range(0,nbData):
-                    if compare(i,x,y,x_proba,y_proba): #y is dominated
-                        maximality_class[i,class_values.index(y.node.label[0])] = 0
-                    elif compare(i,y,x,y_proba,x_proba): #x is dominated
-                        maximality_class[i,class_values.index(x.node.label[0])] = 0 
-            #if only one child is singleton
-            elif (x.node.count() == 1) or (y.node.count() == 1) :
-                if x.node.count() == 1 : #'x' is singleton
-                    for i in range(0,nbData): #accumulate the ip of 'y'
-                        y_proba[i,0] *= y.node.proba[i][0]
-                        y_proba[i,1] *= y.node.proba[i][1] 
-                    
-                    maximality_loop(y.left,y.right,y_proba,y_proba.copy())
-                    maximality_loop(x,y.left,x_proba,y_proba)
-                    maximality_loop(x,y.right,x_proba,y_proba)
-                    
-                elif y.node.count() == 1 :
-                    for i in range(0,nbData):
-                        x_proba[i,0] *= x.node.proba[i][0]
-                        x_proba[i,1] *= x.node.proba[i][1]
-                    
-                    maximality_loop(x.left,x.right,x_proba,x_proba.copy())
-                    maximality_loop(x.left,y,x_proba,y_proba)
-                    maximality_loop(x.right,y,x_proba,y_proba)
-                    
-                else :
-                    raise Exception('Unexpected error')
-                    
-            else: #both children are not singletons
-                for i in range(0,nbData):
-                    x_proba[i,0] *= x.node.proba[i][0]
-                    x_proba[i,1] *= x.node.proba[i][1] 
-                    y_proba[i,0] *= y.node.proba[i][0]
-                    y_proba[i,1] *= y.node.proba[i][1]
-                      
-                maximality_loop(x.left,x.right,x_proba,x_proba.copy())
-                maximality_loop(y.left,y.right,y_proba,y_proba.copy())                    
-                maximality_loop(x,y.left,x_proba,y_proba)
-                maximality_loop(x,y.right,x_proba,y_proba)
-                maximality_loop(x.left,y,x_proba,y_proba)
-                maximality_loop(x.right,y,x_proba,y_proba)
-
-                 
-        maximality_loop(self.left,self.right,self.node.proba.copy(),self.node.proba.copy())
-        return maximality_class
+        probas = self.probaPos(bound=[0,1])
+        predictions = []
+        for i in range(0,len(probas)):
+            predictions.append(probas[i].nc_intervaldom_decision())
+            
+        return predictions
     
     
     def printTree(self, _p = 0):

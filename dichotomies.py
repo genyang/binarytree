@@ -3,6 +3,7 @@ from binarytree import models,clustering
 from classifip.models import ncc
 from scipy import cluster
 import numpy as np
+import random
 
 
 class dichotomies:
@@ -152,7 +153,7 @@ class dichotomies:
                 self.tree_kmeans(arff, labels_left, tree_parent.left)
                 self.tree_kmeans(arff, labels_right, tree_parent.right)
             
-    def build_ordinal(self,arff,labels=[], tree_parent=None):
+    def build_ordinal(self,arff,labels=[], tree_parent=None,random_seed=None,ncc_s=[2],costs=None):
         """
         Building the dichotomy tree using the ordinal structure of the class.
         At each split, every possibility in respect of the ordinal structure is tested, 
@@ -166,32 +167,43 @@ class dichotomies:
         
         #Recursion
         elif len(labels) > 1 :
-            # A NBC classifier is learnt for each split, the accuracy of each classifier is stored
-            scores = [0 for l in range(len(labels)-1)]
+            # A NCC classifier is learnt for each split, the accuracy of each classifier is stored
+            scores = [0] * (len(labels)-1)
             for index,label in enumerate(labels):
                 nbc = ncc.NCC()
                 # We split labels using the ordinal information
                 if index > 0 :
                    
                     data_bi = binarytree.select_class_binary(arff,positive=labels[0:index], negative=labels[index:])
+                    size_data = len(data_bi.data)
+                    
+                    if random_seed != None:
+                        random.seed(random_seed)
+                    random.shuffle(data_bi.data)
+                    
+                    datatr=data_bi.make_clone()
+                    datatst=data_bi.make_clone()
+                    
+                    datatr.data = data_bi.data[0:(3*size_data)/4]
+                    datatst.data = data_bi.data[(3*size_data)/4:]
                 
-                    nbc.learn(data_bi)               
-                    evaluations = nbc.evaluate(data_bi.data, ncc_s_param=[2])
+                    nbc.learn(datatr)    
+                    evaluations = nbc.evaluate(datatst.data, ncc_s_param=ncc_s)
                     results = []
                     
                     for eva in evaluations: 
                         results.append(eva[0].nc_maximal_decision())
                         
-                    data_lab=[x[-1] for x in data_bi.data]
+                    data_lab=[x[-1] for x in datatst.data]
                     
                     for run,lab in enumerate(data_lab):
                         ind = nbc.feature_values['class'].index(lab)
                         if results[run][ind] == 1:
                             sc = 1./results[run].sum()
-                            scores[index-1] += - 1.2* sc*sc + 2.2 * sc
+                            scores[index-1] += - 0.6* sc*sc + 1.6 * sc
                   
             
-            # The NBC yielding the highest score is chosen as the actual split
+            # The NCC yielding the highest score is chosen as the actual split
             ind_max = scores.index(max(scores)) + 1
             labels_left = labels[0:ind_max]
             labels_right = labels[ind_max:]
@@ -204,7 +216,7 @@ class dichotomies:
             self.build_ordinal(arff, labels_right, tree_parent.right)
                 
     
-    def build_hierarchical(self,arff):
+    def build_hierarchical(self,arff,random_seed=None,ncc_s=[2],costs=None):
         """
         Building the dichotomy tree with the hirarchical clustering method. Basing on the distance matrix, 
         a set of linkage techniques are used. The one yielding the best accuracy over training data is retained. 
@@ -216,26 +228,35 @@ class dichotomies:
         linkages = {"single":None,"complete":None,"average":None,"median":None,"centroid":None,"weighted":None,"ward":None}
         discounted_acc = [0. for i in range(0,7)]
         nb_var = len(clusters.feature_names)
+        size_data = len(arff.data)
+        
+        if random_seed != None:
+            random.seed(random_seed)
+            random.shuffle(arff.data)
+            
+        datatr=arff.make_clone()            
+        datatr.data = arff.data[0:(3*size_data)/4]
+                    
         data_validation = []
         lab_validation = []
-        for instance in arff.data:
+        for instance in arff.data[(3*size_data)/4:]:
             data_validation.append(instance[:(nb_var-1)])
             lab_validation.append(instance[-1])
         
         for index, method in enumerate(linkages.keys()):
             tree = clusters.build_tree(method)
-            tree.learnAll(arff)
+            tree.learnAll(datatr)
             linkages[method]=tree
             
-            tree.evaluate(data_validation,ncc_s_param=[2])    
-            results = tree.decision_maximality()
+            tree.evaluate(data_validation,ncc_s_param=ncc_s)    
+            results = tree.decision_maximality(costs=costs)
                 
                 
             for run,lab in enumerate(lab_validation):
                 ind = clusters.feature_values['class'].index(lab)
                 if results[run][ind]==1.:
                     score = 1/results[run].sum()
-                    discounted_acc[index] += -1.2 * score * score + 2.2 * score
+                    discounted_acc[index] += -0.6 * score * score + 1.6 * score
             
         index_max = discounted_acc.index(max(discounted_acc))
             
